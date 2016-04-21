@@ -1,19 +1,21 @@
 package com.example;
 
-import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.cloud.sleuth.sampler.AlwaysSampler;
+import org.springframework.cloud.stream.annotation.EnableBinding;
+import org.springframework.cloud.stream.messaging.Sink;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.rest.core.annotation.RepositoryRestResource;
-import org.springframework.stereotype.Repository;
+import org.springframework.integration.annotation.MessageEndpoint;
+import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
@@ -21,7 +23,16 @@ import javax.persistence.Id;
 import java.util.List;
 
 @SpringBootApplication
+@EnableDiscoveryClient
+@EnableBinding(Sink.class)
 public class QuoteServiceApplication {
+    @Bean
+    public AlwaysSampler defaultSampler() {
+        return new AlwaysSampler();
+    }
+
+    @Autowired
+    MyMessageProcessor messageProcessor;
 
     @Autowired
     @Bean
@@ -40,6 +51,14 @@ public class QuoteServiceApplication {
     }
 }
 
+@MessageEndpoint
+class MyMessageProcessor {
+    @ServiceActivator(inputChannel = Sink.INPUT)
+    public void reportMessage(String msg) {
+        System.out.println(msg);
+    }
+}
+
 @RepositoryRestResource
 interface QuoteRepository extends CrudRepository<Quote, Long> {
     @Query("select q from Quote q order by RAND()")
@@ -54,47 +73,6 @@ class QuoteController {
     @RequestMapping("/random")
     Quote getRandomQuote() {
         return quoteRepository.getQuotesRand().get(0);
-    }
-}
-
-interface ReactiveRepository<T> {
-    Mono<Void> insert(Publisher<T> elements);
-
-    Flux<T> list();
-
-    Mono<T> findById(String id);
-}
-
-@Repository
-class H2Repository implements ReactiveRepository<Quote> {
-    @Autowired
-    QuoteRepository quoteRepository;
-
-    @Override
-    public Mono<Void> insert(Publisher<Quote> elements) {
-        return null;
-    }
-
-    @Override
-    public Flux<Quote> list() {
-        Iterable<Quote> quotes = quoteRepository.findAll();
-        return Flux.fromIterable(quotes);
-    }
-
-    @Override
-    public Mono<Quote> findById(String id) {
-        return null;
-    }
-}
-
-@RestController
-class TestReactor {
-    @Autowired
-    H2Repository h2repo;
-
-    @RequestMapping("/list")
-    public Flux<Quote> getList() {
-        return h2repo.list();
     }
 }
 
